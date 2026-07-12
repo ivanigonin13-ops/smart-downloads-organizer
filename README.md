@@ -31,7 +31,7 @@
 
 * **Вариант А (Для разработчиков):** Склонируйте репозиторий через Git, выполнив команду в терминале:
   ```bash
-  git clone https://github.com
+  git clone https://github.com/ivanigonin13-ops/smart-downloads-organizer.git
   cd smart-downloads-organizer
   ```
 
