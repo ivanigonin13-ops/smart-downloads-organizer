@@ -1,5 +1,7 @@
 {
   "watch_directory": "",
+  "delete_old_files": true,
+  "max_file_age_days": 30,
   "rules": {
     "Images": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"],
     "Documents": [".pdf", ".docx", ".doc", ".xlsx", ".txt", ".pptx", ".csv"],
@@ -8,3 +10,4 @@
     "Audio_Video": [".mp3", ".wav", ".mp4", ".mkv", ".avi", ".mov"]
   }
 }
+

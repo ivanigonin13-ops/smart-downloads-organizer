@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from send2trash import send2trash  # Импортируем библиотеку для удаления в корзину
 
 # Настройка логирования
 logging.basicConfig(
@@ -18,20 +19,14 @@ logging.basicConfig(
 )
 
 def get_default_downloads_dir():
-    """Автоматически находит стандартную папку Загрузок для любой ОС (учитывает русскую локаль Linux)"""
+    """Автоматически находит стандартную папку Загрузок для любой ОС"""
     home = Path.home()
-    
-    # Список возможных имён папки Загрузок
     possible_names = ["Downloads", "Загрузки"]
-    
     for name in possible_names:
         fallback_path = os.path.join(home, name)
         if os.path.exists(fallback_path):
             return fallback_path
-            
-    # Если ничего не нашли, возвращаем стандартный английский путь
     return os.path.join(home, "Downloads")
-
 
 # Загрузка конфигурации
 try:
@@ -41,9 +36,37 @@ except FileNotFoundError:
     logging.error("Файл config.json не найден!")
     exit(1)
 
-# Если путь в конфиге пустой, берем дефолтный
 WATCH_DIR = os.path.abspath(config['watch_directory']) if config['watch_directory'] else get_default_downloads_dir()
 RULES = config['rules']
+DELETE_OLD = config.get('delete_old_files', False)
+MAX_AGE_DAYS = config.get('max_file_age_days', 30)
+
+def clean_old_files(watch_dir, rules, max_age_days):
+    """Находит и удаляет файлы в корзину, если они старше max_age_days"""
+    logging.info(f"Проверка старых файлов (ограничение: {max_age_days} дней)...")
+    now = time.time()
+    cutoff = now - (max_age_days * 86400) # 86400 секунд в сутках
+    
+    # Проверяем только папки категорий, которые создал наш органайзер
+    for folder_name in rules.keys():
+        folder_path = os.path.join(watch_dir, folder_name)
+        if not os.path.exists(folder_path):
+            continue
+            
+        for item in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item)
+            
+            # Проверяем только файлы (папки внутри категорий не трогаем)
+            if os.path.isfile(item_path):
+                # Получаем время последнего изменения файла
+                file_modified_time = os.path.getmtime(item_path)
+                
+                if file_modified_time < cutoff:
+                    try:
+                        send2trash(item_path)
+                        logging.info(f"🗑️ Старый файл отправлен в корзину: {folder_name}/{item}")
+                    except Exception as e:
+                        logging.error(f"Не удалось удалить {item}: {e}")
 
 def move_file(file_path, watch_dir, rules):
     """Общая функция для перемещения одного файла по правилам"""
@@ -54,7 +77,6 @@ def move_file(file_path, watch_dir, rules):
     _, extension = os.path.splitext(filename)
     extension = extension.lower()
 
-    # Игнорируем временные файлы загрузки браузеров
     if extension in ['.crdownload', '.tmp', '.part', '.download']:
         return
 
@@ -66,7 +88,6 @@ def move_file(file_path, watch_dir, rules):
             
             target_path = os.path.join(target_dir, filename)
             
-            # Разрешение конфликтов имен
             if os.path.exists(target_path):
                 name, ext = os.path.splitext(filename)
                 target_path = os.path.join(target_dir, f"{name}_{int(time.time())}{ext}")
@@ -79,7 +100,6 @@ def move_file(file_path, watch_dir, rules):
                 logging.error(f"Ошибка перемещения {filename}: {e}")
             break
 
-    # Если категория не найдена
     if not moved:
         others_dir = os.path.join(watch_dir, "Others")
         os.makedirs(others_dir, exist_ok=True)
@@ -90,8 +110,8 @@ def move_file(file_path, watch_dir, rules):
             logging.error(f"Ошибка перемещения {filename} в Others: {e}")
 
 def initial_clean(watch_dir, rules):
-    """Сканирует папку и раскладывает уже существующие файлы перед стартом трекера"""
-    logging.info("Запуск первичной сортировки существующих файлов...")
+    """Сканирует корневую папку Загрузок перед стартом трекера"""
+    logging.info("Запуск первичной сортировки новых файлов...")
     for item in os.listdir(watch_dir):
         item_path = os.path.join(watch_dir, item)
         if os.path.isfile(item_path):
@@ -102,7 +122,6 @@ class DownloadHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
-        # Небольшая пауза, чтобы файл успел инициализироваться в системе
         time.sleep(1)
         move_file(event.src_path, WATCH_DIR, RULES)
 
@@ -113,10 +132,14 @@ if __name__ == "__main__":
 
     logging.info(f"Отслеживаемая папка: {WATCH_DIR}")
     
-    # Сначала убираем старый мусор
+    # 1. Сначала сортируем новые файлы в корне
     initial_clean(WATCH_DIR, RULES)
+    
+    # 2. Затем очищаем старые файлы в подпапках, если функция включена
+    if DELETE_OLD:
+        clean_old_files(WATCH_DIR, RULES, MAX_AGE_DAYS)
 
-    # Запускаем постоянный мониторинг
+    # 3. Запускаем постоянный мониторинг
     event_handler = DownloadHandler()
     observer = Observer()
     observer.schedule(event_handler, path=WATCH_DIR, recursive=False)
@@ -131,3 +154,4 @@ if __name__ == "__main__":
         observer.stop()
         logging.info("⏹️ Скрипт успешно остановлен.")
     observer.join()
+
