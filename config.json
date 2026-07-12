@@ -1,0 +1,10 @@
+{
+  "watch_directory": "",
+  "rules": {
+    "Images": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"],
+    "Documents": [".pdf", ".docx", ".doc", ".xlsx", ".txt", ".pptx", ".csv"],
+    "Archives": [".zip", ".rar", ".7z", ".tar", ".gz"],
+    "Applications": [".exe", ".msi", ".dmg", ".pkg"],
+    "Audio_Video": [".mp3", ".wav", ".mp4", ".mkv", ".avi", ".mov"]
+  }
+}
