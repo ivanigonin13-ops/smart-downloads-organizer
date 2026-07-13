@@ -1,5 +1,3 @@
 watchdog
 send2trash
-customtkinter
-threading
 
